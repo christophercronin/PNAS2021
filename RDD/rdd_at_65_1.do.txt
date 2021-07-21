@@ -1,0 +1,32 @@
+set more off
+clear
+
+insheet using pop_2020.csv, comma
+rename tot_pop pop
+keep if month==1
+keep if year==2020
+keep age pop
+keep if age>=45 & age<=84
+save temp1, replace
+clear
+
+insheet using deaths_by_single_age_2_22_2021.csv, comma
+
+collapse (sum) covid total, by(age)
+keep if age>=45 & age<=84
+merge 1:1 age using temp1
+keep if _merge==3
+
+gen after=age>=65
+gen z=age-65
+gen zpos=z*after
+gen zneg=z*(1-after)
+gen zpos2=zpos*zpos
+gen zpos3=zpos*zpos2
+gen zneg2=zneg*zneg
+gen zneg3=zneg*zneg2
+gen covid_dr_ln=ln(covid*100000/pop)
+
+reg covid_dr_ln zpos zneg after
+predict yp
+outsheet age covid_dr_ln yp using rdd_at_65.csv, comma replace
