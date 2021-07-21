@@ -1,0 +1,163 @@
+set more off
+clear
+
+insheet using ah_excess_deaths_by_sex__age__and_race.csv, comma
+rename mmwryear year
+keep if year>=2015 & year<=2020
+
+replace sex="3" if sex=="All Sexes"
+replace sex="2" if sex=="Female (F)"
+replace sex="1" if sex=="Male (M)"
+destring sex, replace
+keep if sex==3
+
+drop if agegroup=="All Ages"
+drop if agegroup=="Not stated"
+
+rename raceethnicity race
+gen z15=substr(race,1,15)
+
+rename covid19weighted covid
+rename deathsweighted all
+rename mmwrweek week
+keep if race=="All Race/Ethnicity Groups"
+keep if week<53
+
+rename agegroup ag
+
+gen agegroup=1
+replace agegroup=2 if ag=="15-19 Years" 
+replace agegroup=3 if ag=="20-24 Years"
+replace agegroup=4 if ag=="25-29 Years"
+replace agegroup=5 if ag=="30-34 Years"
+replace agegroup=6 if ag=="35-39 Years"
+replace agegroup=7 if ag=="40-44 Years"
+replace agegroup=8 if ag=="45-49 Years"
+replace agegroup=9 if ag=="50-54 Years"
+replace agegroup=10 if ag=="55-59 Years"
+replace agegroup=11 if ag=="60-64 Years"
+replace agegroup=12 if ag=="65-69 Years"
+replace agegroup=13 if ag=="70-74 Years"
+replace agegroup=14 if ag=="75-79 Years"
+replace agegroup=15 if ag=="80-84 Years"
+replace agegroup=16 if ag=="85+"
+
+keep year week race sex agegroup covid all
+
+label var all "all deaths"
+label var covid "covid deaths"
+label var week "mmwr week of the year"
+
+
+reshape wide covid all, i(year week) j(agegroup)
+replace year=year-2000
+reshape wide all* covid*, i(week) j(year)
+gen c=1
+merge m:1 c using pop1520
+
+* covid(i)(k) is covid deaths for age group i (1-16) and year k (15-19)
+* all is similarly defined 
+* pop is population for the age group
+* so the data set now is by week with all the data in wide format
+* just make do loops easier
+
+
+* get the mean death rate by age group over the past five years
+* multiply that by the 2020 population group to get predicted deaths by age
+forvalues i=1/16 {
+gen dr`i'=(all`i'17+all`i'18+all`i'19)/(pop`i'17+pop`i'18+pop`i'19)
+gen pred`i'=dr`i'*pop`i'20
+}
+
+
+* get covid deaths and all deaths in 2020
+gen covidt20=0
+gen allt20=0
+forvalues i=1/16 {
+replace covidt20=covidt20+covid`i'20
+replace allt20=allt20+all`i'20
+}
+
+label var covidt20 "covid deaths in 2020"
+label var allt20 "all deaths in 2020"
+
+
+* get predicted total deaths by summing over age groups
+gen predt=0
+forvalues i=1/16 {
+replace predt=predt+pred`i'
+}
+
+
+* prednaivet is predicted total deaths by just using average deaths in previous years 
+gen prednaivet=0
+forvalues j=17/19 {
+forvalues i=1/16 {
+replace prednaivet=prednaivet+all`i'`j'
+} 
+}
+
+* need to deflate this by 3 since we are using 17-19
+replace prednaivet=prednaivet/3
+
+gen excess1=allt20-predt
+gen excess2=allt20-prednaivet
+gen noncovid1=excess1-covidt20
+gen noncovid2=excess2-covidt20
+
+label var excess1 "excess deaths in 2020 using re-weighted 2020 pop"
+label var excess2 "excess deaths in 2020 using naive estimates"
+label var noncovid1 "excess non covid deaths, 2020, using re-weighted 2020 pop"
+label var noncovid2 "excess non covid deaths, 2020, using naive estimates"
+
+
+gen avgdeathlt65=0
+gen avgdeathge65=0
+gen excess1lt65=0
+gen excess2lt65=0
+gen noncovid1lt65=0
+gen noncovid2lt65=0
+gen excess1ge65=0
+gen excess2ge65=0
+gen noncovid1ge65=0
+gen noncovid2ge65=0
+gen all20lt65=0
+gen all20ge65=0
+gen predtlt65=0
+gen predtge65=0
+
+forvalues i=1/11 {
+replace all20lt65=all20lt65+all`i'20
+replace predtlt65=predtlt65+pred`i'
+replace avgdeathlt65=avgdeathlt65+(all`i'17+all`i'18+all`i'19)/3
+replace excess1lt65=excess1lt65+all`i'20-pred`i'
+replace excess2lt65=excess2lt65+all`i'20-(all`i'17+all`i'18+all`i'19)/3
+replace noncovid1lt65=noncovid1lt65+(all`i'20-pred`i'-covid`i'20)
+replace noncovid2lt65=noncovid2lt65+(all`i'20-(all`i'17+all`i'18+all`i'19)/3 - covid`i'20)
+}
+
+forvalues i=12/16 {
+replace all20ge65=all20ge65+all`i'20
+replace predtge65=predtge65+pred`i'
+replace avgdeathge65=avgdeathge65+(all`i'17+all`i'18+all`i'19)/3
+replace excess1ge65=excess1ge65+all`i'20-pred`i'
+replace excess2ge65=excess2ge65+all`i'20-(all`i'17+all`i'18+all`i'19)/3
+replace noncovid1ge65=noncovid1ge65+(all`i'20-pred`i'-covid`i'20)
+replace noncovid2ge65=noncovid2ge65+(all`i'20-(all`i'17+all`i'18+all`i'19)/3 - covid`i'20)
+}
+save temp1, replace
+
+collapse (sum) covidt20
+list
+
+clear
+use temp1
+keep if week>=10
+ 
+collapse (sum) allt20 predt prednaivet excess1 excess2 noncovid1 noncovid2 ///
+all20lt65 all20ge65 predtlt65 predtge65 avgdeathlt65 avgdeathge65 excess1lt65 excess1ge65 excess2lt65 excess2ge65 /// 
+noncovid1lt65 noncovid1ge65 noncovid2lt65 noncovid2ge65, by(week)
+list
+
+ 
+

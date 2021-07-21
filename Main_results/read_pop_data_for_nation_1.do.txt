@@ -1,0 +1,52 @@
+set more off
+clear
+
+forvalues i=15/20 {
+insheet using pop_20`i'.csv, comma
+keep if month==1
+keep if year==20`i'
+drop if age>100
+rename tot_pop pop
+keep year age pop
+
+gen agegroup=1
+replace agegroup=2 if age>=15 & age<=19
+replace agegroup=3 if age>=20 & age<=24
+replace agegroup=4 if age>=25 & age<=29
+replace agegroup=5 if age>=30 & age<=34
+replace agegroup=6 if age>=35 & age<=39
+replace agegroup=7 if age>=40 & age<=44
+replace agegroup=8 if age>=45 & age<=49
+replace agegroup=9 if age>=50 & age<=54
+replace agegroup=10 if age>=55 & age<=59
+replace agegroup=11 if age>=60 & age<=64
+replace agegroup=12 if age>=65 & age<=69
+replace agegroup=13 if age>=70 & age<=74
+replace agegroup=14 if age>=75 & age<=79
+replace agegroup=15 if age>=80 & age<=84
+replace agegroup=16 if age>=85
+collapse (sum) pop, by(year agegroup)
+save pop20`i', replace
+clear
+}
+
+use pop2015
+append using pop2016
+append using pop2017
+append using pop2018
+append using pop2019
+append using pop2020
+
+replace year=year-2000
+reshape wide pop, i(year) j(agegroup)
+gen c=1
+reshape wide pop*, i(c) j(year)
+save pop1520, replace
+
+
+
+
+
+
+
+
